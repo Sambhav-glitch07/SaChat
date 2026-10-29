@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "140263915737",
+    "project_id": "sachat-a705d",
+    "storage_bucket": "sachat-a705d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:140263915737:android:6e81e2040620d7aef57ec8",
+        "android_client_info": {
+          "package_name": "in.sachat.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3iT1opkiNfsFjwwdDmZe0bAqcYiMc8f0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
