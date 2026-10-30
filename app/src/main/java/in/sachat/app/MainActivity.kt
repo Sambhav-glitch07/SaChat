@@ -1,40 +1,44 @@
 package `in`.sachat.app
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.os.Bundle
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.ColorDrawable
-import android.text.Editable
-import android.text.TextWatcher
 import android.text.InputType
+import android.text.TextWatcher
+import android.text.Editable
 import android.view.Gravity
 import android.view.View
+import android.view.animation.AlphaAnimation
 import android.widget.*
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.*
+import java.util.Collections
 
 class MainActivity : Activity() {
 
     private val bg = Color.rgb(11, 15, 27)
     private val mint = Color.rgb(91, 231, 190)
-    private val textMain = Color.rgb(242, 246, 255)
-    private val textMuted = Color.rgb(151, 164, 190)
-    private val borderColor = Color.argb(75, 191, 211, 255)
+    private val blue = Color.rgb(65, 160, 255)
+    private val white = Color.rgb(242, 246, 255)
+    private val muted = Color.rgb(151, 164, 190)
+    private val border = Color.argb(75, 191, 211, 255)
 
     private val auth by lazy { FirebaseAuth.getInstance() }
     private val db by lazy { FirebaseFirestore.getInstance() }
 
     private var listener: ListenerRegistration? = null
+    private var userListener: ListenerRegistration? = null
+
     private var activeChatId: String? = null
     private var activeChatName = ""
     private var activeOtherUid = ""
+
+    private val verifiedEmail = "sambhavgupta997@gmail.com"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +57,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         listener?.remove()
+        userListener?.remove()
         super.onDestroy()
     }
 
@@ -69,14 +74,11 @@ class MainActivity : Activity() {
             )
         ).apply {
             cornerRadius = radius
-            setStroke(1, borderColor)
+            setStroke(1, border)
         }
     }
 
-    private fun pill(
-        color: Int,
-        radius: Float = 30f
-    ): GradientDrawable {
+    private fun pill(color: Int, radius: Float = 30f): GradientDrawable {
         return GradientDrawable().apply {
             setColor(color)
             cornerRadius = radius
@@ -102,7 +104,7 @@ class MainActivity : Activity() {
     private fun label(
         value: String,
         size: Float,
-        color: Int = textMain,
+        color: Int = white,
         bold: Boolean = false
     ): TextView {
         return TextView(this).apply {
@@ -120,12 +122,16 @@ class MainActivity : Activity() {
     ): EditText {
         return EditText(this).apply {
             hint = hintText
-            setHintTextColor(textMuted)
-            setTextColor(textMain)
+            setHintTextColor(muted)
+            setTextColor(white)
             textSize = 15f
             setSingleLine(true)
             setPadding(18, 14, 18, 14)
-            background = glass(Color.argb(150, 31, 42, 65), 18f)
+
+            background = glass(
+                Color.argb(150, 31, 42, 65),
+                18f
+            )
 
             inputType = when {
                 password ->
@@ -159,17 +165,52 @@ class MainActivity : Activity() {
             text = title
             textSize = 15f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(if (primary) bg else textMain)
+            setTextColor(if (primary) bg else white)
             gravity = Gravity.CENTER
             setPadding(20, 13, 20, 13)
+
             background = pill(
                 if (primary) mint
                 else Color.argb(100, 55, 73, 106),
                 18f
             )
+
             setOnClickListener { onClick() }
         }
     }
+
+    // VERIFIED BADGE
+
+    private fun addVerifiedName(
+        parent: LinearLayout,
+        name: String,
+        size: Float
+    ) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        row.addView(label(name, size, white, true))
+
+        if (name.isNotBlank()) {
+            val email = if (name == "Sambhav") {
+                verifiedEmail
+            } else {
+                ""
+            }
+
+            if (email == verifiedEmail) {
+                row.addView(
+                    label("  ✓", size, blue, true)
+                )
+            }
+        }
+
+        parent.addView(row)
+    }
+
+    // AUTHENTICATION
 
     private fun showAuth() {
         listener?.remove()
@@ -194,13 +235,13 @@ class MainActivity : Activity() {
             }
         )
 
-        page.addView(label("SaChat", 34f, textMain, true))
+        page.addView(label("SaChat", 34f, white, true))
 
         page.addView(
             label(
                 "Your conversations, in a different light.",
                 14f,
-                textMuted
+                muted
             ).apply {
                 setPadding(0, 4, 0, 28)
             }
@@ -216,129 +257,128 @@ class MainActivity : Activity() {
         val email = field("Email address")
         val password = field("Password (6+ characters)", true)
 
-        card.addView(
-            label("WELCOME BACK", 11f, mint, true).apply {
-                setPadding(2, 0, 0, 16)
-            }
-        )
-
+        card.addView(label("WELCOME TO SACHAT", 11f, mint, true))
         card.addView(name)
         card.addView(email)
         card.addView(password)
 
         val status = label("", 12f, Color.rgb(255, 135, 151))
 
-        card.addView(
-            actionButton("Create account") {
-                val n = name.text.toString().trim()
-                val e = email.text.toString().trim()
-                val p = password.text.toString()
+        card.addView(actionButton("Create account") {
+            val n = name.text.toString().trim()
+            val e = email.text.toString().trim()
+            val p = password.text.toString()
 
-                if (n.isBlank() || e.isBlank() || p.length < 6) {
-                    status.text =
-                        "Enter a name, valid email and password of at least 6 characters."
-                } else {
-                    status.text = "Creating account..."
-
-                    auth.createUserWithEmailAndPassword(e, p)
-                        .addOnSuccessListener { result ->
-                            val uid = result.user?.uid ?: return@addOnSuccessListener
-
-                            db.collection("users").document(uid)
-                                .set(
-                                    mapOf(
-                                        "uid" to uid,
-                                        "name" to n,
-                                        "email" to e,
-                                        "createdAt" to FieldValue.serverTimestamp(),
-                                        "lastSeen" to FieldValue.serverTimestamp()
-                                    )
-                                )
-                                .addOnSuccessListener {
-                                    showHome()
-                                }
-                                .addOnFailureListener {
-                                    status.text =
-                                        "Profile error: ${it.localizedMessage}"
-                                }
-                        }
-                        .addOnFailureListener {
-                            status.text =
-                                it.localizedMessage ?: "Account creation failed."
-                        }
-                }
-            }.apply {
-                layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
-                    bottomMargin = 10
-                }
+            if (n.isBlank() || e.isBlank() || p.length < 6) {
+                status.text = "Enter your name, email and a password of at least 6 characters."
+                return@actionButton
             }
-        )
 
-        card.addView(
-            actionButton("Sign in") {
-                val e = email.text.toString().trim()
-                val p = password.text.toString()
+            status.text = "Creating account..."
 
-                if (e.isBlank() || p.isBlank()) {
-                    status.text = "Enter your email and password."
-                } else {
-                    status.text = "Signing in..."
+            auth.createUserWithEmailAndPassword(e, p)
+                .addOnSuccessListener { result ->
 
-                    auth.signInWithEmailAndPassword(e, p)
+                    val uid = result.user?.uid ?: return@addOnSuccessListener
+
+                    val verified = e.equals(
+                        verifiedEmail,
+                        ignoreCase = true
+                    )
+
+                    db.collection("users")
+                        .document(uid)
+                        .set(
+                            mapOf(
+                                "uid" to uid,
+                                "name" to n,
+                                "email" to e,
+                                "verified" to verified,
+                                "createdAt" to FieldValue.serverTimestamp(),
+                                "lastSeen" to FieldValue.serverTimestamp()
+                            )
+                        )
                         .addOnSuccessListener {
-                            val user = auth.currentUser
-                                ?: return@addOnSuccessListener
-
-                            db.collection("users").document(user.uid)
-                                .get()
-                                .addOnSuccessListener { doc ->
-                                    if (!doc.exists()) {
-                                        db.collection("users")
-                                            .document(user.uid)
-                                            .set(
-                                                mapOf(
-                                                    "uid" to user.uid,
-                                                    "name" to e.substringBefore("@"),
-                                                    "email" to e,
-                                                    "createdAt" to
-                                                        FieldValue.serverTimestamp()
-                                                )
-                                            )
-                                            .addOnSuccessListener { showHome() }
-                                            .addOnFailureListener {
-                                                status.text =
-                                                    "Profile error: ${it.localizedMessage}"
-                                            }
-                                    } else {
-                                        showHome()
-                                    }
-                                }
-                                .addOnFailureListener {
-                                    status.text =
-                                        "Profile error: ${it.localizedMessage}"
-                                }
+                            showHome()
                         }
                         .addOnFailureListener {
-                            status.text =
-                                it.localizedMessage ?: "Sign in failed."
+                            status.text = "Profile error: ${it.localizedMessage}"
                         }
                 }
-            }.apply {
-                layoutParams = LinearLayout.LayoutParams(-1, -2)
+                .addOnFailureListener {
+                    status.text = it.localizedMessage ?: "Account creation failed."
+                }
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = 10
             }
-        )
+        })
+
+        card.addView(actionButton("Sign in") {
+            val e = email.text.toString().trim()
+            val p = password.text.toString()
+
+            if (e.isBlank() || p.isBlank()) {
+                status.text = "Enter email and password."
+                return@actionButton
+            }
+
+            status.text = "Signing in..."
+
+            auth.signInWithEmailAndPassword(e, p)
+                .addOnSuccessListener {
+                    val user = auth.currentUser ?: return@addOnSuccessListener
+
+                    db.collection("users")
+                        .document(user.uid)
+                        .get()
+                        .addOnSuccessListener { doc ->
+
+                            if (!doc.exists()) {
+                                db.collection("users")
+                                    .document(user.uid)
+                                    .set(
+                                        mapOf(
+                                            "uid" to user.uid,
+                                            "name" to e.substringBefore("@"),
+                                            "email" to e,
+                                            "verified" to e.equals(
+                                                verifiedEmail,
+                                                true
+                                            ),
+                                            "createdAt" to FieldValue.serverTimestamp()
+                                        )
+                                    )
+                                    .addOnSuccessListener { showHome() }
+                                    .addOnFailureListener {
+                                        status.text = it.localizedMessage
+                                    }
+                            } else {
+                                showHome()
+                            }
+                        }
+                        .addOnFailureListener {
+                            status.text = it.localizedMessage
+                        }
+                }
+                .addOnFailureListener {
+                    status.text = it.localizedMessage ?: "Sign in failed."
+                }
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(-1, -2)
+        })
 
         card.addView(status.apply {
-            setPadding(2, 10, 2, 10)
+            setPadding(2, 12, 2, 5)
         })
 
         page.addView(card)
 
         page.addView(
             label(
-                "SA CHAT  •  CONNECTED THROUGH FIREBASE",
+                "SACHAT  •  POWERED BY FIREBASE",
                 10f,
-                textMuted
+                muted
             ).apply {
                 gravity = Gravity.CENTER
                 setPadding(0, 22, 0, 0)
@@ -346,15 +386,19 @@ class MainActivity : Activity() {
         )
     }
 
+    // HOME SCREEN
+
     private fun showHome() {
         listener?.remove()
+        userListener?.remove()
         activeChatId = null
 
-        val page = base()
         val current = auth.currentUser ?: run {
             showAuth()
             return
         }
+
+        val page = base()
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -379,8 +423,8 @@ class MainActivity : Activity() {
             setPadding(12, 0, 0, 0)
         }
 
-        titleBox.addView(label("SaChat", 22f, textMain, true))
-        titleBox.addView(label("DIRECT MESSAGES", 10f, mint, true))
+        titleBox.addView(label("SaChat", 22f, white, true))
+        titleBox.addView(label("MESSAGES & COMMUNITY", 10f, mint, true))
 
         header.addView(
             titleBox,
@@ -388,7 +432,7 @@ class MainActivity : Activity() {
         )
 
         header.addView(
-            label("⋯", 28f, textMain).apply {
+            label("⋯", 28f, white).apply {
                 gravity = Gravity.CENTER
                 setPadding(12, 0, 8, 0)
                 setOnClickListener { showAccountMenu() }
@@ -398,13 +442,14 @@ class MainActivity : Activity() {
         page.addView(header)
 
         val search = EditText(this).apply {
-            hint = "Search people"
-            setHintTextColor(textMuted)
-            setTextColor(textMain)
+            hint = "Search people..."
+            setHintTextColor(muted)
+            setTextColor(white)
             textSize = 14f
             setSingleLine(true)
             setPadding(18, 13, 18, 13)
             background = glass(Color.argb(125, 29, 40, 62), 18f)
+
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
                 setMargins(0, 14, 0, 12)
             }
@@ -413,7 +458,7 @@ class MainActivity : Activity() {
         page.addView(search)
 
         page.addView(
-            label("YOUR SPACE", 11f, textMuted, true).apply {
+            label("DIRECT MESSAGES", 11f, muted, true).apply {
                 setPadding(4, 2, 4, 10)
             }
         )
@@ -427,7 +472,10 @@ class MainActivity : Activity() {
             addView(list)
         }
 
-        page.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        page.addView(
+            scroll,
+            LinearLayout.LayoutParams(-1, 0, 1f)
+        )
 
         val bottom = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -436,12 +484,19 @@ class MainActivity : Activity() {
             background = glass(Color.argb(190, 23, 33, 53), 22f)
         }
 
-        val initial = (current.email?.firstOrNull() ?: 'S')
-            .uppercaseChar().toString()
+        val profile = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(10, 0, 0, 0)
+        }
+
+        val currentName = current.email?.substringBefore("@") ?: "Sambhav"
+
+        addVerifiedName(profile, currentName, 14f)
+        profile.addView(label("Account connected", 11f, mint))
 
         bottom.addView(
             TextView(this).apply {
-                text = initial
+                text = currentName.take(1).uppercase()
                 gravity = Gravity.CENTER
                 textSize = 16f
                 setTextColor(bg)
@@ -451,24 +506,13 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(38, 38)
         )
 
-        val profile = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(10, 0, 0, 0)
-        }
-
-        profile.addView(
-            label(
-                current.email?.substringBefore("@") ?: "Your profile",
-                14f, textMain, true
-            )
+        bottom.addView(
+            profile,
+            LinearLayout.LayoutParams(0, -2, 1f)
         )
 
-        profile.addView(label("Account connected", 11f, mint))
-
-        bottom.addView(profile, LinearLayout.LayoutParams(0, -2, 1f))
-
         bottom.addView(
-            label("SETTINGS", 10f, textMuted, true).apply {
+            label("SETTINGS", 10f, muted, true).apply {
                 setOnClickListener { showAccountMenu() }
             }
         )
@@ -480,36 +524,53 @@ class MainActivity : Activity() {
             }
         )
 
-        db.collection("users").document(current.uid)
+        db.collection("users")
+            .document(current.uid)
             .update("lastSeen", FieldValue.serverTimestamp())
 
-        db.collection("users").get()
-            .addOnSuccessListener { snapshot ->
-                list.removeAllViews()
+        // Live user directory
 
-                val users = snapshot.documents.filter {
-                    it.id != current.uid
+        userListener = db.collection("users")
+            .addSnapshotListener { snapshot, error ->
+
+                if (error != null) {
+                    toast("Users error: ${error.localizedMessage}")
+                    return@addSnapshotListener
                 }
 
+                val users = snapshot?.documents
+                    ?.filter { it.id != current.uid }
+                    ?.toMutableList() ?: mutableListOf()
+
                 if (users.isEmpty()) {
+                    list.removeAllViews()
+
                     val empty = LinearLayout(this).apply {
                         orientation = LinearLayout.VERTICAL
                         gravity = Gravity.CENTER
                         setPadding(22, 42, 22, 42)
                         background = glass(
-                            Color.argb(115, 28, 39, 60), 26f
+                            Color.argb(115, 28, 39, 60),
+                            26f
                         )
                     }
 
                     empty.addView(
-                        label("No conversations yet", 18f, textMain, true)
-                            .apply { gravity = Gravity.CENTER }
+                        label(
+                            "No people found",
+                            18f,
+                            white,
+                            true
+                        ).apply {
+                            gravity = Gravity.CENTER
+                        }
                     )
 
                     empty.addView(
                         label(
-                            "Create another account on a second device to start chatting.",
-                            13f, textMuted
+                            "Create an account on another device to start chatting.",
+                            13f,
+                            muted
                         ).apply {
                             gravity = Gravity.CENTER
                             setPadding(0, 8, 0, 0)
@@ -517,111 +578,215 @@ class MainActivity : Activity() {
                     )
 
                     list.addView(empty)
+                    return@addSnapshotListener
                 }
 
-                users.forEach { doc ->
-                    val personName = doc.getString("name") ?: "SaChat user"
-                    val personEmail = doc.getString("email") ?: ""
+                // Get latest chat activity and sort people by latest message.
 
-                    val item = LinearLayout(this).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = Gravity.CENTER_VERTICAL
-                        setPadding(14, 13, 14, 13)
-                        background = glass(
-                            Color.argb(135, 27, 37, 58), 22f
+                db.collection("chats")
+                    .whereArrayContains("members", current.uid)
+                    .get()
+                    .addOnSuccessListener { chats ->
+
+                        val latest = HashMap<String, Long>()
+
+                        chats.documents.forEach { chat ->
+                            val members = chat.get("members") as? List<*>
+                                ?: emptyList<Any>()
+
+                            val other = members
+                                .filterIsInstance<String>()
+                                .firstOrNull { it != current.uid }
+
+                            val time = chat.getTimestamp("updatedAt")
+                                ?.toDate()?.time ?: 0L
+
+                            if (other != null) {
+                                latest[other] = time
+                            }
+                        }
+
+                        users.sortByDescending {
+                            latest[it.id] ?: 0L
+                        }
+
+                        list.removeAllViews()
+
+                        users.forEach { doc ->
+
+                            val personName = doc.getString("name")
+                                ?: "SaChat user"
+
+                            val personEmail = doc.getString("email")
+                                ?: ""
+
+                            val isVerified = doc.getBoolean("verified")
+                                ?: personEmail.equals(
+                                    verifiedEmail,
+                                    true
+                                )
+
+                            val item = LinearLayout(this).apply {
+                                orientation = LinearLayout.HORIZONTAL
+                                gravity = Gravity.CENTER_VERTICAL
+                                setPadding(14, 13, 14, 13)
+                                background = glass(
+                                    Color.argb(135, 27, 37, 58),
+                                    22f
+                                )
+                            }
+
+                            val avatar = TextView(this).apply {
+                                text = personName.take(1).uppercase()
+                                textSize = 19f
+                                setTextColor(mint)
+                                gravity = Gravity.CENTER
+                                background = pill(
+                                    Color.argb(130, 48, 74, 91),
+                                    30f
+                                )
+                            }
+
+                            item.addView(
+                                avatar,
+                                LinearLayout.LayoutParams(48, 48)
+                            )
+
+                            val details = LinearLayout(this).apply {
+                                orientation = LinearLayout.VERTICAL
+                                setPadding(13, 0, 0, 0)
+                            }
+
+                            val nameRow = LinearLayout(this).apply {
+                                orientation = LinearLayout.HORIZONTAL
+                                gravity = Gravity.CENTER_VERTICAL
+                            }
+
+                            nameRow.addView(
+                                label(
+                                    personName,
+                                    16f,
+                                    white,
+                                    true
+                                )
+                            )
+
+                            if (isVerified) {
+                                nameRow.addView(
+                                    label("  ✓", 16f, blue, true)
+                                )
+                            }
+
+                            details.addView(nameRow)
+
+                            details.addView(
+                                label(
+                                    personEmail,
+                                    12f,
+                                    muted
+                                )
+                            )
+
+                            item.addView(
+                                details,
+                                LinearLayout.LayoutParams(0, -2, 1f)
+                            )
+
+                            item.addView(
+                                label("CHAT", 10f, mint, true)
+                            )
+
+                            item.setOnClickListener {
+                                openChat(doc.id, personName)
+                            }
+
+                            list.addView(
+                                item,
+                                LinearLayout.LayoutParams(-1, -2).apply {
+                                    bottomMargin = 9
+                                }
+                            )
+                        }
+
+                        search.addTextChangedListener(
+                            object : TextWatcher {
+
+                                override fun beforeTextChanged(
+                                    s: CharSequence?,
+                                    start: Int,
+                                    count: Int,
+                                    after: Int
+                                ) {}
+
+                                override fun onTextChanged(
+                                    s: CharSequence?,
+                                    start: Int,
+                                    before: Int,
+                                    count: Int
+                                ) {
+                                    for (i in 0 until list.childCount) {
+                                        val child = list.getChildAt(i)
+
+                                        val details =
+                                            (child as? LinearLayout)
+                                                ?.let {
+                                                    it.getChildAt(1)
+                                                        as? LinearLayout
+                                                }
+
+                                        val name = details
+                                            ?.let {
+                                                it.getChildAt(0)
+                                                    as? LinearLayout
+                                            }
+                                            ?.let {
+                                                (it.getChildAt(0)
+                                                    as? TextView)?.text
+                                            }?.toString() ?: ""
+
+                                        child.visibility =
+                                            if (
+                                                name.contains(
+                                                    s.toString(),
+                                                    true
+                                                ) || s.isNullOrBlank()
+                                            ) View.VISIBLE
+                                            else View.GONE
+                                    }
+                                }
+
+                                override fun afterTextChanged(
+                                    s: Editable?
+                                ) {}
+                            }
                         )
                     }
-
-                    val avatar = TextView(this).apply {
-                        text = personName.take(1).uppercase()
-                        textSize = 19f
-                        setTextColor(mint)
-                        gravity = Gravity.CENTER
-                        background = pill(
-                            Color.argb(130, 48, 74, 91), 30f
-                        )
-                    }
-
-                    item.addView(
-                        avatar,
-                        LinearLayout.LayoutParams(48, 48)
-                    )
-
-                    val details = LinearLayout(this).apply {
-                        orientation = LinearLayout.VERTICAL
-                        setPadding(13, 0, 0, 0)
-                    }
-
-                    details.addView(
-                        label(personName, 16f, textMain, true)
-                    )
-                    details.addView(label(personEmail, 12f, textMuted))
-
-                    item.addView(
-                        details,
-                        LinearLayout.LayoutParams(0, -2, 1f)
-                    )
-
-                    item.addView(label("CHAT", 10f, mint, true))
-
-                    item.setOnClickListener {
-                        openChat(doc.id, personName)
-                    }
-
-                    list.addView(
-                        item,
-                        LinearLayout.LayoutParams(-1, -2).apply {
-                            bottomMargin = 9
-                        }
-                    )
-                }
-
-                search.addTextChangedListener(object : TextWatcher {
-                    override fun beforeTextChanged(
-                        s: CharSequence?, start: Int,
-                        count: Int, after: Int
-                    ) {}
-
-                    override fun onTextChanged(
-                        s: CharSequence?, start: Int,
-                        before: Int, count: Int
-                    ) {
-                        for (i in 0 until list.childCount) {
-                            val child = list.getChildAt(i)
-                            val details = (child as? LinearLayout)
-                                ?.let { it.getChildAt(1) as? LinearLayout }
-
-                            val name = details
-                                ?.let { it.getChildAt(0) as? TextView }
-                                ?.text?.toString() ?: ""
-
-                            child.visibility =
-                                if (name.contains(s.toString(), true) ||
-                                    s.isNullOrBlank()) View.VISIBLE
-                                else View.GONE
-                        }
-                    }
-
-                    override fun afterTextChanged(s: Editable?) {}
-                })
-            }
-            .addOnFailureListener {
-                toast("Could not load users: ${it.localizedMessage}")
             }
     }
 
+    // SETTINGS
+
     private fun showAccountMenu() {
-        android.app.AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle("SaChat settings")
-            .setItems(arrayOf("Account details", "Sign out")) { _, which ->
+            .setItems(
+                arrayOf(
+                    "Account details",
+                    "Sign out"
+                )
+            ) { _, which ->
+
                 if (which == 1) {
                     auth.signOut()
                     listener?.remove()
+                    userListener?.remove()
                     showAuth()
                 } else {
-                    android.app.AlertDialog.Builder(this)
-                        .setTitle("Account")
-                        .setMessage(auth.currentUser?.email ?: "Signed out")
+                    AlertDialog.Builder(this)
+                        .setTitle("Your account")
+                        .setMessage(
+                            auth.currentUser?.email ?: "Signed out"
+                        )
                         .setPositiveButton("OK", null)
                         .show()
                 }
@@ -629,11 +794,16 @@ class MainActivity : Activity() {
             .show()
     }
 
+    // CHAT ID
+
     private fun makeChatId(a: String, b: String): String {
         return listOf(a, b).sorted().joinToString("_")
     }
 
-    private fun openChat(otherUid: String, otherName: String) {
+    private fun openChat(
+        otherUid: String,
+        otherName: String
+    ) {
         val currentUid = auth.currentUser?.uid ?: return
 
         activeChatId = makeChatId(currentUid, otherUid)
@@ -642,6 +812,8 @@ class MainActivity : Activity() {
 
         showConversation(currentUid, otherUid)
     }
+
+    // CONVERSATION
 
     private fun showConversation(
         currentUid: String,
@@ -656,11 +828,14 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(10, 12, 14, 12)
-            background = glass(Color.argb(185, 26, 38, 59), 22f)
+            background = glass(
+                Color.argb(185, 26, 38, 59),
+                22f
+            )
         }
 
         header.addView(
-            label("‹", 32f, textMain).apply {
+            label("‹", 32f, white).apply {
                 setPadding(8, 0, 14, 0)
                 setOnClickListener { showHome() }
             }
@@ -674,7 +849,10 @@ class MainActivity : Activity() {
             background = pill(mint, 30f)
         }
 
-        header.addView(avatar, LinearLayout.LayoutParams(40, 40))
+        header.addView(
+            avatar,
+            LinearLayout.LayoutParams(40, 40)
+        )
 
         val nameBlock = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -682,8 +860,9 @@ class MainActivity : Activity() {
         }
 
         nameBlock.addView(
-            label(activeChatName, 16f, textMain, true)
+            label(activeChatName, 16f, white, true)
         )
+
         nameBlock.addView(
             label("DIRECT MESSAGE", 10f, mint, true)
         )
@@ -694,7 +873,7 @@ class MainActivity : Activity() {
         )
 
         header.addView(
-            label("⋯", 26f, textMain).apply {
+            label("⋯", 26f, white).apply {
                 setPadding(10, 0, 4, 0)
                 setOnClickListener { showAccountMenu() }
             }
@@ -710,6 +889,7 @@ class MainActivity : Activity() {
         val scroll = ScrollView(this).apply {
             clipToPadding = false
             setPadding(0, 8, 0, 8)
+
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 intArrayOf(
@@ -720,6 +900,7 @@ class MainActivity : Activity() {
             ).apply {
                 cornerRadius = 24f
             }
+
             addView(messages)
         }
 
@@ -735,32 +916,45 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(8, 7, 7, 7)
-            background = glass(Color.argb(205, 27, 38, 60), 24f)
+            background = glass(
+                Color.argb(205, 27, 38, 60),
+                24f
+            )
         }
 
         val input = EditText(this).apply {
-            hint = "Message SaChat"
-            setHintTextColor(textMuted)
-            setTextColor(textMain)
+            hint = "Message SaChat..."
+            setHintTextColor(muted)
+            setTextColor(white)
             textSize = 15f
             minLines = 1
             maxLines = 4
             setPadding(15, 9, 12, 9)
             background = ColorDrawable(Color.TRANSPARENT)
+
             inputType = InputType.TYPE_CLASS_TEXT or
                     InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
                     InputType.TYPE_TEXT_FLAG_MULTI_LINE
         }
 
-        composer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+        composer.addView(
+            input,
+            LinearLayout.LayoutParams(0, -2, 1f)
+        )
 
         composer.addView(
             actionButton("Send") {
+
                 val body = input.text.toString().trim()
 
                 if (body.isNotEmpty()) {
-                    val chatRef = db.collection("chats").document(chatId)
-                    val messageRef = chatRef.collection("messages").document()
+
+                    val chatRef = db.collection("chats")
+                        .document(chatId)
+
+                    val messageRef = chatRef
+                        .collection("messages")
+                        .document()
 
                     val payload = mapOf(
                         "id" to messageRef.id,
@@ -773,19 +967,26 @@ class MainActivity : Activity() {
 
                     chatRef.set(
                         mapOf(
-                            "members" to listOf(currentUid, otherUid),
+                            "members" to listOf(
+                                currentUid,
+                                otherUid
+                            ),
                             "lastMessage" to body,
                             "updatedAt" to FieldValue.serverTimestamp()
                         ),
                         SetOptions.merge()
                     ).addOnSuccessListener {
+
                         messageRef.set(payload)
                             .addOnSuccessListener {
                                 input.setText("")
                             }
                             .addOnFailureListener {
-                                toast("Message failed: ${it.localizedMessage}")
+                                toast(
+                                    "Message failed: ${it.localizedMessage}"
+                                )
                             }
+
                     }.addOnFailureListener {
                         toast("Could not send: ${it.localizedMessage}")
                     }
@@ -795,10 +996,15 @@ class MainActivity : Activity() {
 
         page.addView(composer)
 
+        // REAL-TIME MESSAGE LISTENER
+
         listener = db.collection("chats")
             .document(chatId)
             .collection("messages")
-            .orderBy("createdAt", Query.Direction.ASCENDING)
+            .orderBy(
+                "createdAt",
+                Query.Direction.ASCENDING
+            )
             .addSnapshotListener { snapshot, error ->
 
                 if (error != null) {
@@ -809,13 +1015,14 @@ class MainActivity : Activity() {
                 messages.removeAllViews()
 
                 snapshot?.documents?.forEach { doc ->
+
                     val sender = doc.getString("senderId")
                     val body = doc.getString("text") ?: ""
 
                     val bubble = TextView(this).apply {
                         text = body
                         textSize = 15f
-                        setTextColor(textMain)
+                        setTextColor(white)
                         setPadding(15, 11, 15, 11)
 
                         background = glass(
@@ -826,15 +1033,29 @@ class MainActivity : Activity() {
                             18f
                         )
 
-                        maxWidth =
-                            (resources.displayMetrics.widthPixels * 0.76f)
-                                .toInt()
+                        maxWidth = (
+                            resources.displayMetrics.widthPixels * 0.76f
+                        ).toInt()
+                    }
+
+                    // Subtle new-message animation
+
+                    if (doc.metadata.hasPendingWrites() ||
+                        doc.metadata.isFromCache
+                    ) {
+                        val animation = AlphaAnimation(0.65f, 1f)
+                        animation.duration = 350
+                        bubble.startAnimation(animation)
                     }
 
                     val row = LinearLayout(this).apply {
                         orientation = LinearLayout.HORIZONTAL
+
                         gravity = if (sender == currentUid)
-                            Gravity.END else Gravity.START
+                            Gravity.END
+                        else
+                            Gravity.START
+
                         setPadding(5, 4, 5, 4)
                     }
 
@@ -849,6 +1070,10 @@ class MainActivity : Activity() {
     }
 
     private fun toast(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        Toast.makeText(
+            this,
+            message,
+            Toast.LENGTH_LONG
+        ).show()
     }
 }
