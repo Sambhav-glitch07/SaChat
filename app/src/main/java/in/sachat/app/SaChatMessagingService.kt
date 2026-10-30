@@ -1,10 +1,8 @@
-implementation("androidx.core:core-ktx:1.15.0")
 package in.sachat.app
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.google.firebase.auth.FirebaseAuth
@@ -49,26 +47,26 @@ class SaChatMessagingService : FirebaseMessagingService() {
                 "SaChat messages",
                 NotificationManager.IMPORTANCE_HIGH
             )
-
             manager.createNotificationChannel(channel)
         }
 
-        val intent = Intent(
-            this,
-            MainActivity::class.java
-        )
+        val openAppIntent: android.content.Intent =
+            android.content.Intent(
+                this,
+                in.sachat.app.MainActivity::class.java
+            )
 
-        intent.setFlags(
-    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-    Intent.FLAG_ACTIVITY_SINGLE_TOP
-)
+        openAppIntent.addFlags(
+            android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
+            android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+        )
 
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
-            intent,
+            openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or
-                    PendingIntent.FLAG_IMMUTABLE
+                PendingIntent.FLAG_IMMUTABLE
         )
 
         val notification = NotificationCompat.Builder(
