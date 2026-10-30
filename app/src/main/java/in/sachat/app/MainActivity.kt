@@ -1,4 +1,4 @@
-package in.sachat.app
+package `in`.sachat.app
 
 import android.app.Activity
 import android.os.Bundle
